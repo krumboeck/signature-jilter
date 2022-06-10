@@ -60,33 +60,6 @@ public class Application implements CommandLineRunner {
     @Override
     public void run(String...args) throws Exception {
 
-    	testLDAP();
-    	
-    	// Try to graceful shutdown
-    	Runtime.getRuntime().addShutdownHook(new Thread() {
-    	    public void run() {
-    	    	if (serverSocketChannel != null && serverSocketChannel.isOpen()) {
-					LOG.debug("Close socket: " + serverSocketChannel.socket().getLocalSocketAddress());
-    	    		try {
-						serverSocketChannel.close();
-					} catch (IOException e) {
-						LOG.debug("Unexpected exception", e);
-					}
-    	    	}
-    	    	if (executor != null) {
-					LOG.debug("Stop all threads");
-    	    		executor.shutdownNow();
-					LOG.debug("Wait for threads to stop");
-    	    		try {
-						executor.awaitTermination(10, TimeUnit.SECONDS);
-					} catch (InterruptedException e) {
-						LOG.debug("Unexpected exception", e);
-					}
-    	    	}
-				LOG.debug("Shutdown completed.");
-    	    }
-    	 });
-
     	SocketAddress endpoint = new InetSocketAddress(serverAddress, serverPort);
 
     	LOG.debug("Opening socket");
@@ -116,11 +89,6 @@ public class Application implements CommandLineRunner {
 			}
 
 		}
-    }
-
-    private void testLDAP() {
-    	LdapBenutzer benutzer = ldapBenutzerRepository.findByMail("b.steurer@figl.at");
-    	LOG.debug("LDAP userPrincipalName: " + benutzer.getUserPrincipalName());
     }
 
 }
