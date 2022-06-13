@@ -8,7 +8,6 @@ import java.nio.channels.SocketChannel;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.TimeUnit;
 
 import javax.inject.Inject;
 
@@ -22,9 +21,6 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.ComponentScan;
 
 import com.sendmail.jilter.samples.standalone.ServerRunnable;
-
-import at.universalnet.ad.api.main.entry.LdapBenutzer;
-import at.universalnet.ad.api.main.repo.LdapBenutzerRepository;
 
 @SpringBootApplication
 @ComponentScan({
@@ -46,9 +42,6 @@ public class Application implements CommandLineRunner {
 
     @Inject
     private ApplicationContext applicationContext;
-
-    @Inject
-    private LdapBenutzerRepository ldapBenutzerRepository;
 
 	private ServerSocketChannel serverSocketChannel = null;
 	private ExecutorService executor = null;
