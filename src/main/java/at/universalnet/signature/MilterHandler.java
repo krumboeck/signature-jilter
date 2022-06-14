@@ -13,7 +13,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -52,8 +54,19 @@ public class MilterHandler extends JilterHandlerAdapter {
 	private static final String MIMETYPE_TEXT_PLAIN = "text/plain";
 	private static final String MIMETYPE_TEXT_HTML = "text/html";
 
-	private static final String HEADER_CONTENT_TYPE = "Content-Type";
+	private static final Set<String> HEADER_LIST = new HashSet<String>() {
+		private static final long serialVersionUID = 1L;
+		{
+			add("Content-Type");
+			add("Content-Transfer-Encoding");
+			add("Content-Disposition");
+		}
+	};
 
+	private static final String TRACE_ALL = "all";
+	private static final String TRACE_ON_ERROR = "onError";
+	private static final String TRACE_TRUE = "true";
+	
 	@Value("${template.mark.pattern:sig#(?<template>[^#]*)(#(?<mailAddress>[^#]*))?#sig}")
 	private String markPatternStr;
 
@@ -72,8 +85,8 @@ public class MilterHandler extends JilterHandlerAdapter {
 	@Value("${template.domains:#null}")
 	private String templateDomains;
 
-	@Value("${trace.message.body:false}")
-	private boolean traceBody;
+	@Value("${trace.message.body:none}")
+	private String traceBody;
 
 	@Inject
 	private BLOBService blobService;
@@ -81,13 +94,13 @@ public class MilterHandler extends JilterHandlerAdapter {
 	@Inject
 	private LdapBenutzerRepository ldapBenutzerRepository;
 
-	private MimeMessage mimeMessage = null;
+	private ByteArrayOutputStream messageBody = new ByteArrayOutputStream();
 	private Pattern markPattern;
 	private Pattern varPattern;
 	private Pattern bodyStartPattern;
 	private Pattern bodyEndPattern;
 	private Pattern fromPattern;
-	private String contentType = null;
+	private Map<String, String> messageHeaders = new HashMap<>();
 	private String fromAddress = null;
 	private Set<String> domainList = new HashSet<>();
 
@@ -138,15 +151,22 @@ public class MilterHandler extends JilterHandlerAdapter {
 
 	@Override
     public JilterStatus header(String headerf, String headerv) {
-    	if (HEADER_CONTENT_TYPE.equals(headerf)) {
-    		contentType = headerv;
-    	}
+		if (HEADER_LIST.contains(headerf)) {
+			messageHeaders.put(headerf, headerv);
+    		LOG.debug("Header " + headerf + ": " + headerv);
+		}
 		return JilterStatus.SMFIS_CONTINUE;
     }
 
 	@Override
 	public JilterStatus body(ByteBuffer bodyp) {
-		mimeMessage = readEmailBody(bodyp.array());
+		try {
+			messageBody.write(bodyp.array());
+			messageBody.flush();
+		} catch (IOException e) {
+			LOG.error("Error writing body to byte stream", e);
+			return JilterStatus.SMFIS_TEMPFAIL;
+		}
 		return JilterStatus.SMFIS_CONTINUE;
 	}
 
@@ -156,7 +176,7 @@ public class MilterHandler extends JilterHandlerAdapter {
     		return JilterStatus.SMFIS_TEMPFAIL;
     	}
 
-    	if (mimeMessage == null) {
+    	if (messageBody == null) {
     		LOG.warn("Filter couldn't read message body! Continue without processing!");
     		return JilterStatus.SMFIS_CONTINUE;
     	}
@@ -164,6 +184,7 @@ public class MilterHandler extends JilterHandlerAdapter {
     	String domain = fromAddress.replaceFirst("^.*@", "");
     	if (domainList.contains(domain)) {
 
+    		MimeMessage mimeMessage = readEmailBody(messageBody.toByteArray());
     		boolean applied = false;
     		try {
     			LOG.info("Apply template to message from " + fromAddress);
@@ -173,6 +194,13 @@ public class MilterHandler extends JilterHandlerAdapter {
     			LOG.info("Mail contained no mark to replace");
     		} catch (IOException | MessagingException | TemplateException e) {
     			LOG.error("Unable to apply template", e);
+    			if (traceBody.equalsIgnoreCase(TRACE_ON_ERROR) || traceBody.equalsIgnoreCase(TRACE_TRUE)) {
+					try {
+						LOG.error("Body:\n" + new String(messageBody.toByteArray(), "UTF-8"));
+					} catch (UnsupportedEncodingException e1) {
+						LOG.error("UnsupportedEncodingException", e);
+					}
+    			}
     		} catch (Exception e) {
     			LOG.error("Caught unexpected exception", e);
 			}
@@ -189,8 +217,8 @@ public class MilterHandler extends JilterHandlerAdapter {
 				String bodypString = null;
 				try {
 					bodypString = new String(rawBody, "UTF-8");
-					if (traceBody) {
-						LOG.debug("Body:\n" + bodypString);
+					if (traceBody.equalsIgnoreCase(TRACE_ALL)) {
+						LOG.debug("Body (after):\n" + bodypString);
 					}
 				} catch (UnsupportedEncodingException e) {
 					LOG.error("UnsupportedEncodingException", e);
@@ -209,8 +237,10 @@ public class MilterHandler extends JilterHandlerAdapter {
 
 	private MimeMessage readEmailBody(byte[] rawBody) {
 		String fakeHeader = "Return-Path: <no-reply@example.invalid>\r\n";
-		if (contentType != null) {
-			fakeHeader += HEADER_CONTENT_TYPE + ": " + contentType + "\r\n";
+		if (!messageHeaders.isEmpty()) {
+			for (Map.Entry<String, String> header : messageHeaders.entrySet()) {
+				fakeHeader += header.getKey() + ": " + header.getValue() + "\r\n";
+			}
 		}
 		fakeHeader += "\r\n";
 
@@ -303,8 +333,8 @@ public class MilterHandler extends JilterHandlerAdapter {
 		String temp = content;
 		int count = 0;
 
-		if (traceBody) {
-			LOG.debug("Body:\n" + content);
+		if (traceBody.equalsIgnoreCase(TRACE_ALL)) {
+			LOG.debug("Body (before):\n" + content);
 		}
 		LOG.debug("Try to find mark");
 		Matcher matcher = markPattern.matcher(temp);
