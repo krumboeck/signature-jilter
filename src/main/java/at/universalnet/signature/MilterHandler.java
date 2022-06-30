@@ -347,7 +347,7 @@ public class MilterHandler extends JilterHandlerAdapter {
 			String templateName = matcher.group("template");
 			String mailAddress = matcher.group("mailAddress");
 
-			if (!mailAddress.contains("@") && alternateAtCharacter != null) {
+			if (mailAddress != null && !mailAddress.contains("@") && alternateAtCharacter != null) {
 				LOG.debug("Replace alternate at-sign in mail address: " + mailAddress + " (" + alternateAtCharacter + ")");
 				mailAddress = mailAddress.replace(alternateAtCharacter, "@");
 			}
