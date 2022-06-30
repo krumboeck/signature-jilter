@@ -88,6 +88,9 @@ public class MilterHandler extends JilterHandlerAdapter {
 	@Value("${trace.message.body:none}")
 	private String traceBody;
 
+	@Value("${template.mark.alternate.at.char:#null}")
+	private String alternateAtCharacter;
+
 	@Inject
 	private BLOBService blobService;
 
@@ -343,6 +346,11 @@ public class MilterHandler extends JilterHandlerAdapter {
 			count++;
 			String templateName = matcher.group("template");
 			String mailAddress = matcher.group("mailAddress");
+
+			if (!mailAddress.contains("@") && alternateAtCharacter != null) {
+				LOG.debug("Replace alternate at-sign in mail address: " + mailAddress + " (" + alternateAtCharacter + ")");
+				mailAddress = mailAddress.replace(alternateAtCharacter, "@");
+			}
 
 			LOG.debug("Template: " + templateName);
 			LOG.debug("Mail address: " + mailAddress);
