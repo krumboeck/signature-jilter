@@ -106,6 +106,18 @@ public final class LdapBenutzer {
 	@Attribute(name = "primaryTelexNumber")
 	private String primaryTelexNumber;
 
+	@Attribute(name = "mobile")
+	private String mobile;
+
+	@Attribute(name = "facsimileTelephoneNumber")
+	private String facsimileTelephoneNumber;
+
+	@Attribute(name = "homePhone")
+	private String homePhone;
+
+	@Attribute(name = "ipPhone")
+	private String ipPhone;
+
 	public LdapBenutzer() {
 		super();
 	}
@@ -340,6 +352,38 @@ public final class LdapBenutzer {
 
 	public void setPrimaryTelexNumber(String primaryTelexNumber) {
 		this.primaryTelexNumber = primaryTelexNumber;
+	}
+
+	public String getMobile() {
+		return mobile;
+	}
+
+	public void setMobile(String mobile) {
+		this.mobile = mobile;
+	}
+
+	public String getFacsimileTelephoneNumber() {
+		return facsimileTelephoneNumber;
+	}
+
+	public void setFacsimileTelephoneNumber(String facsimileTelephoneNumber) {
+		this.facsimileTelephoneNumber = facsimileTelephoneNumber;
+	}
+
+	public String getHomePhone() {
+		return homePhone;
+	}
+
+	public void setHomePhone(String homePhone) {
+		this.homePhone = homePhone;
+	}
+
+	public String getIpPhone() {
+		return ipPhone;
+	}
+
+	public void setIpPhone(String ipPhone) {
+		this.ipPhone = ipPhone;
 	}
 
 }
