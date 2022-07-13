@@ -44,6 +44,7 @@ import jakarta.mail.Multipart;
 import jakarta.mail.Part;
 import jakarta.mail.Session;
 import jakarta.mail.internet.MimeMessage;
+import jakarta.mail.internet.MimeMultipart;
 
 @Component
 @Scope("prototype")
@@ -299,39 +300,59 @@ public class MilterHandler extends JilterHandlerAdapter {
 		} else if (content instanceof Multipart) {
 			LOG.debug("Multipart: yes");
 			Multipart multipart = (Multipart) content;
-			for (int i = 0; i < multipart.getCount(); i++) {
-				BodyPart part = multipart.getBodyPart(i);
-				Object partContent = part.getContent();
-				if (!(partContent instanceof String)) {
-					continue;
-				}
-
-				String contentType = part.getContentType();
-				String disp = part.getDisposition();
-				boolean changes = false;
-				if (disp == null || disp.equalsIgnoreCase(Part.INLINE)) {
-					if (contentType.startsWith(MIMETYPE_TEXT_PLAIN) || contentType.startsWith(MIMETYPE_TEXT_HTML)) {
-						try {
-							String newContent = applyTemplate((String) partContent, contentType);
-							part.setContent(newContent, contentType);
-							message.saveChanges();
-							changes = true;
-						} catch (MarkNotFoundException e) {
-							// Do nothing.
-						}
-					} else {
-						throw new TemplateException("Unknown content type: " + contentType);
-					}
-				}
-				if (!changes) {
-					throw new MarkNotFoundException("No part has any mark");
-				}
-			}
+			applyTemplate(multipart);
+			message.saveChanges();
 		} else {
 			throw new TemplateException("Unknown content object: " + content.getClass().getName());
 		}
 	}
 
+	private void applyTemplate(Multipart multipart) throws MessagingException, IOException, TemplateException, MarkNotFoundException {
+		LOG.debug("Process multipart");
+		if (multipart instanceof MimeMultipart) {
+			MimeMultipart mimeMultipart = (MimeMultipart) multipart;
+			if (mimeMultipart.getPreamble() != null) {
+				LOG.debug("Multipart preamble: " + mimeMultipart.getPreamble());
+			}
+		}
+		boolean changes = false;
+		for (int i = 0; i < multipart.getCount(); i++) {
+			LOG.debug("Process part with index " + i);
+			BodyPart part = multipart.getBodyPart(i);
+			Object partContent = part.getContent();
+			if (partContent instanceof Multipart) {
+				try {
+					applyTemplate((Multipart) partContent);
+					changes = true;
+				} catch (MarkNotFoundException e) {
+					// Do nothing.
+				}
+			}
+			if (!(partContent instanceof String)) {
+				continue;
+			}
+
+			String contentType = part.getContentType();
+			String disp = part.getDisposition();
+			if (disp == null || disp.equalsIgnoreCase(Part.INLINE)) {
+				if (contentType.startsWith(MIMETYPE_TEXT_PLAIN) || contentType.startsWith(MIMETYPE_TEXT_HTML)) {
+					try {
+						String newContent = applyTemplate((String) partContent, contentType);
+						part.setContent(newContent, contentType);
+						changes = true;
+					} catch (MarkNotFoundException e) {
+						// Do nothing.
+					}
+				} else {
+					throw new TemplateException("Unknown content type: " + contentType);
+				}
+			}
+		}
+		if (!changes) {
+			throw new MarkNotFoundException("No part has any mark");
+		}
+	}
+	
 	private String applyTemplate(String content, String contentType) throws MarkNotFoundException, TemplateException {
 		String temp = content;
 		int count = 0;
