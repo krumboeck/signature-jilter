@@ -130,4 +130,54 @@ smtpd_milters=inet:localhost:8025
 ```
 
 ### Configure mail client
-Configure you mail client, so it simply adds a default signature like **sig#template1#sig#** to every mail.
+Configure your mail client, so it simply adds a default signature like `sig#template1#sig` to every mail.
+
+In case you want to use an alias address simple add it after the template `sig#template1#alias@example.com#sig` or if you have problems with link detection in your mailclient you could also use `sig#template1#alias%example.com#sig` and set the option  `template.mark.alternate.at.char=%` in your config file.
+
+If you are not happy with any of this, you can also configure your own mark with the config option `template.mark.pattern`. Default value is `sig#(?<template>[^#]*)(#(?<mailAddress>[^#]*))?#sig`.
+
+### Example docker stack configuration
+
+```
+  signature_jilter:
+    image: signature-jilter:1.0
+    read_only: true
+    networks:
+      - milter_network
+    volumes:
+      - signature_config:/config:ro
+      - signature_templates:/templates:ro
+    cap_drop:
+      - ALL
+    ulimits:
+      nproc: 200
+      nofile:
+        soft: 1000
+        hard: 2000
+    deploy:
+      mode: replicated
+      replicas: 1
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 3072M
+        reservations:
+          cpus: '0.1'
+          memory: 768M
+
+networks:
+  milter_network:
+    driver: overlay
+    attachable: true
+
+volumes:
+  signature_config:
+  signature_templates:
+```
+
+The whole processing is done in memory, so there is no need for any writeable volume. If you have to use `ports` in your config, then you should protect it with a packet filter, network isolation or encryption if required, because milter api does not implement any security by itself.
+
+
+## Support
+
+If you need commercial support, please visit the website [https://www.universalnet.at](https://www.universalnet.at) or write a mail to [office@universalnet.at](mailto:office@universalnet.at).
