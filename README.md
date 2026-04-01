@@ -13,9 +13,9 @@ Voila! Uniform mail signatures for your organization.
 * com.sendmail.jilter package use SENDMAIL OPEN SOURCE LICENSE
 
 ## Requirements
-* Active directory (also a compatible LDAP server should work: Samba 4)
+* Active directory or other LDAP server (e.g. OpenLDAP)
 * MTA which supports MILTER (Sendmail, Postfix, ...)
-* Java 8 or higher
+* Java 17 or higher
 * Maven (only for build)
 
 ## How to build
@@ -42,8 +42,17 @@ ldap.base=dc=example,dc=com
 ldap.userDN=cn=sign-jitler,ou=users,ou=department,dc=example,dc=com
 ldap.password=verysecret
 
-# Enable SSL/TLS or STARTTLS
-# ssl.enable=true
+# Enable STARTTLS
+# ldap.starttls=true
+
+# LDAP type: ad or ldap
+# ldap.object.type=ad
+
+# Filter for objectclass, when using type "ldap"
+# ldap.filter.objectclass=inetOrgPerson
+
+# Attribute list, which contain mail address for user (comma separated list)
+# ldap.filter.mailAttributes=mail
 
 # Path to all trusted certificates, if you don't want to use the system defaults.
 # ssl.ca.file=/path/to/trusted-ca.crt
@@ -68,14 +77,14 @@ Example of txt template:
 
 ```
 Best regards
-*${ldap:displayName}*
-${ldap:title}
+*${ldap.displayName}*
+${ldap.title}
 
-${ldap:streetAddress}
-${ldap:postalCode} ${ldap:l}
+${ldap.streetAddress}
+${ldap.postalCode} ${ldap.l}
 
 E: ${mailAddress}
-T: ${ldap:telephoneNumber}
+T: ${ldap.telephoneNumber}
 ```
 
 Example of html template:
@@ -98,17 +107,17 @@ Example of html template:
                     <img src="${ldap:thumbnailPhoto}" class=""></td>
                 <td style="width: 380px;">
                   <p><span style="font-family: Arial, Helvetica, sans-serif; font-size: 15px; line-height: 1;">
-                     <strong>${ldap:displayName}</strong><br>
-                     <span style="color: #808080;">${ldap:title}</span></span></p>
+                     <strong>${ldap.displayName}</strong><br>
+                     <span style="color: #808080;">${ldap.title}</span></span></p>
                   <p><span style="font-family: Arial, Helvetica,
                                   sans-serif; font-size: 15px; line-height: 1;">
-                       ${ldap:streetAddress}, ${ldap:postalCode} ${ldap:l}</span>
+                       ${ldap.streetAddress}, ${ldap.postalCode} ${ldap.l}</span>
                      <span
                       style="font-family: Arial, Helvetica, sans-serif;
                       font-size: 15px; line-height: 1;"><br>
                       <a href="mailto:${mailAddress}"
                         moz-do-not-send="true">${mailAddress}</a><br>
-                      ${ldap:telephoneNumber} </span></p>
+                      ${ldap.telephoneNumber} </span></p>
                 </td>
               </tr>
             </tbody>
@@ -140,7 +149,7 @@ If you are not happy with any of this, you can also configure your own mark with
 
 ```
   signature_jilter:
-    image: signature-jilter:1.0
+    image: signature-jilter:1.1
     read_only: true
     networks:
       - milter_network
@@ -150,7 +159,7 @@ If you are not happy with any of this, you can also configure your own mark with
     cap_drop:
       - ALL
     ulimits:
-      nproc: 200
+      nproc: 1000
       nofile:
         soft: 1000
         hard: 2000
