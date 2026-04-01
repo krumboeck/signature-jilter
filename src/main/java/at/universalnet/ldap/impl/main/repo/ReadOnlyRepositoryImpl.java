@@ -1,4 +1,4 @@
-package at.universalnet.ad.impl.main.repo;
+package at.universalnet.ldap.impl.main.repo;
 
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
@@ -10,7 +10,7 @@ import javax.naming.directory.SearchControls;
 import org.springframework.ldap.query.ContainerCriteria;
 import org.springframework.ldap.query.LdapQueryBuilder;
 
-import at.universalnet.ad.api.main.repo.ReadOnlyRepository;
+import at.universalnet.ldap.api.main.repo.ReadOnlyRepository;
 import at.universalnet.signature.util.Utils;
 
 import static org.springframework.ldap.query.LdapQueryBuilder.query;

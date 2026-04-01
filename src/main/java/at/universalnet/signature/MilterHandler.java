@@ -1,27 +1,24 @@
 package at.universalnet.signature;
 
-import java.beans.IntrospectionException;
-import java.beans.PropertyDescriptor;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.StringWriter;
 import java.io.UnsupportedEncodingException;
-import java.lang.reflect.InvocationTargetException;
+import java.io.Writer;
 import java.nio.ByteBuffer;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.Base64;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import javax.annotation.PostConstruct;
 import javax.inject.Inject;
 
 import org.slf4j.Logger;
@@ -35,14 +32,17 @@ import com.sendmail.jilter.JilterHandler;
 import com.sendmail.jilter.JilterHandlerAdapter;
 import com.sendmail.jilter.JilterStatus;
 
-import at.universalnet.ad.api.main.entry.LdapBenutzer;
-import at.universalnet.ad.api.main.repo.LdapBenutzerRepository;
-import at.universalnet.signature.service.BLOBService;
+import at.universalnet.ldap.service.PersonAttributeResolverService;
+import at.universalnet.signature.service.ToDataUrlMethod;
+import freemarker.template.Configuration;
+import freemarker.template.Template;
+import jakarta.annotation.PostConstruct;
 import jakarta.mail.BodyPart;
 import jakarta.mail.MessagingException;
 import jakarta.mail.Multipart;
 import jakarta.mail.Part;
 import jakarta.mail.Session;
+import jakarta.mail.internet.MimeBodyPart;
 import jakarta.mail.internet.MimeMessage;
 import jakarta.mail.internet.MimeMultipart;
 
@@ -93,10 +93,12 @@ public class MilterHandler extends JilterHandlerAdapter {
 	private String alternateAtCharacter;
 
 	@Inject
-	private BLOBService blobService;
+	private PersonAttributeResolverService personAttributeResolverService;
 
 	@Inject
-	private LdapBenutzerRepository ldapBenutzerRepository;
+	private Configuration templateConfig;
+	
+	@Inject ToDataUrlMethod toDataUrlMethod;
 
 	private ByteArrayOutputStream messageBody = new ByteArrayOutputStream();
 	private Pattern markPattern;
@@ -139,7 +141,8 @@ public class MilterHandler extends JilterHandlerAdapter {
 		return SMFIF_CHGBODY;
 	}
 
-    public JilterStatus envfrom(String[] argv, Properties properties) {
+    @Override
+	public JilterStatus envfrom(String[] argv, Properties properties) {
     	if (argv.length > 0) {
     		fromAddress = argv[0];
     		Matcher matcher = fromPattern.matcher(fromAddress);
@@ -174,7 +177,8 @@ public class MilterHandler extends JilterHandlerAdapter {
 		return JilterStatus.SMFIS_CONTINUE;
 	}
 
-    public JilterStatus eom(JilterEOMActions eomActions, Properties properties) {
+    @Override
+	public JilterStatus eom(JilterEOMActions eomActions, Properties properties) {
     	if (fromAddress == null) {
     		LOG.warn("Filter didn't receive From address! TEMPFAIL");
     		return JilterStatus.SMFIS_TEMPFAIL;
@@ -291,7 +295,8 @@ public class MilterHandler extends JilterHandlerAdapter {
 			String contentType = message.getContentType();
 			LOG.debug("Content type: " + contentType);
 			if (contentType.startsWith(MIMETYPE_TEXT_PLAIN) || contentType.startsWith(MIMETYPE_TEXT_HTML)) {
-				String newContent = applyTemplate((String) content, contentType);
+				List<Locale> locales = getLocales(message);
+				String newContent = applyTemplate((String) content, contentType, locales);
 				message.setContent(newContent, contentType);
 				message.saveChanges();
 			} else {
@@ -336,8 +341,12 @@ public class MilterHandler extends JilterHandlerAdapter {
 			String disp = part.getDisposition();
 			if (disp == null || disp.equalsIgnoreCase(Part.INLINE)) {
 				if (contentType.startsWith(MIMETYPE_TEXT_PLAIN) || contentType.startsWith(MIMETYPE_TEXT_HTML)) {
+					List<Locale> locales = null;
+					if (part instanceof MimeBodyPart) {
+						locales = getLocales((MimeBodyPart) part);
+					}
 					try {
-						String newContent = applyTemplate((String) partContent, contentType);
+						String newContent = applyTemplate((String) partContent, contentType, locales);
 						part.setContent(newContent, contentType);
 						changes = true;
 					} catch (MarkNotFoundException e) {
@@ -352,8 +361,8 @@ public class MilterHandler extends JilterHandlerAdapter {
 			throw new MarkNotFoundException("No part has any mark");
 		}
 	}
-	
-	private String applyTemplate(String content, String contentType) throws MarkNotFoundException, TemplateException {
+
+	private String applyTemplate(String content, String contentType, List<Locale> locales) throws MarkNotFoundException, TemplateException {
 		String temp = content;
 		int count = 0;
 
@@ -383,12 +392,22 @@ public class MilterHandler extends JilterHandlerAdapter {
 				LOG.debug("Use \"From\" address because \"Mail address\" value not found: " + mailAddress);
 			}
 
-			String template = getTemplate(templateName, contentType);
-			LdapBenutzer ldapBenutzer = getBenutzerByMail(mailAddress);
-			template = processTemplate(template, ldapBenutzer, templateName, mailAddress);
+			Locale locale = null;
+			if (locales != null && !locales.isEmpty()) {
+				locale = locales.get(0);
+				LOG.debug("Locale: " + locale);
+			}
+			Template template = getTemplate(templateName, contentType, locale);
+			Object personAttributes = getPersonAttributesByMail(mailAddress);
+			Map<String, Object> root = new HashMap<>();
+			root.put("ldap", personAttributes);
+			root.put("templateName", templateName);
+			root.put("mailAddress", mailAddress);
+			root.put("toDataUrl", toDataUrlMethod);
+			String templateOutput = processTemplate(template, root);
+			templateOutput = getBody(templateOutput);
 
-
-			temp = temp.substring(0, matcher.start()) + template + temp.substring(matcher.end());
+			temp = temp.substring(0, matcher.start()) + templateOutput + temp.substring(matcher.end());
 		}
 
 		if (count == 0) {
@@ -396,103 +415,6 @@ public class MilterHandler extends JilterHandlerAdapter {
 		}
 
 		return temp;
-	}
-
-	private String processTemplate(String template, LdapBenutzer benutzer, String templateName, String mailAddress) throws TemplateException {
-
-		String content = template;
-		content = getBody(content);
-		int count = 0;
-		while (true) {
-			Matcher matcher = varPattern.matcher(content);
-			if (matcher.find()) {
-				String expression = matcher.group(1);
-				LOG.debug("Expression: " + expression);
-				Object value;
-				if (expression.startsWith("ldap:")) {
-					value = callGetter(benutzer, expression.replaceFirst("ldap:", ""));
-					if (value instanceof byte[]) {
-						byte[] byteArray = (byte[]) value;
-						String mimeType = blobService.detectMimeType(byteArray);
-						String valueBase64 = Base64.getEncoder().encodeToString(byteArray);
-						value = "data:" + mimeType + ";filename=binary.dat;base64," + valueBase64;
-					}
-				} else if (expression.equals("mailAddress")) {
-					value = mailAddress;
-				} else if (expression.equals("templateName")) {
-					value = templateName;
-				} else {
-					value = null;
-				}
-				logValue(value);
-				if (value == null) {
-					value = "";
-				}
-				content = content.substring(0, matcher.start()) + value + content.substring(matcher.end());
-			} else {
-				break;
-			}
-
-			count++;
-			if (count >= 30) {
-				throw new TemplateException("Endless loop detected! Please check your configuration and template values.");
-			}
-		}
-		return content;
-	}
-	
-	private void logValue(Object value) {
-		if (value == null) {
-			LOG.debug("Value: (not found)");
-		} else if (value instanceof String) {
-			String strValue = (String) value;
-			if (strValue.length() > 70) {
-				strValue = strValue.substring(0, 70) + "...";
-			}
-			LOG.debug("Value: " + strValue);
-		} else {
-			LOG.debug("Value: " + value);
-		}
-	}
-
-	private Object callGetter(Object obj, String fieldName) throws TemplateException {
-		PropertyDescriptor pd;
-		try {
-			pd = new PropertyDescriptor(fieldName, obj.getClass());
-			return pd.getReadMethod().invoke(obj);
-		} catch (IntrospectionException | IllegalAccessException | IllegalArgumentException
-				| InvocationTargetException e) {
-			throw new TemplateException("Problem calling getter for property: " + fieldName);
-		}
-	}
-
-	private String getBody(String content) {
-		Matcher matcherStart = bodyStartPattern.matcher(content);
-		Matcher matcherEnd = bodyEndPattern.matcher(content);
-		if (matcherStart.find()) {
-			if (matcherEnd.find()) {
-				return content.substring(matcherStart.end(), matcherEnd.start());
-			}
-		}
-		return content;
-	}
-
-	private String getTemplate(String name, String contentType) throws TemplateException {
-		String extension = getExtension(contentType);
-		Path templatePath = Paths.get(templateDir + "/" + name + "." + extension);
-		if (Files.notExists(templatePath)) {
-			throw new TemplateException("Template does not exist: " + templatePath);
-		}
-		if (!Files.isReadable(templatePath)) {
-			throw new TemplateException("Template is not readable: " + templatePath);
-		}
-
-		try {
-		    byte[] bytes = Files.readAllBytes(templatePath);
-		    return new String(bytes);
-		} catch (IOException e) {
-			throw new TemplateException("Error reading template", e);
-		}
 	}
 
 	private String getExtension(String contentType) {
@@ -505,12 +427,69 @@ public class MilterHandler extends JilterHandlerAdapter {
 		return "txt";
 	}
 
-	private LdapBenutzer getBenutzerByMail(String mailAddress) throws TemplateException {
-		LdapBenutzer benutzer = ldapBenutzerRepository.findByMail(mailAddress);
-		if (benutzer == null) {
-			throw new TemplateException("User could not be found with mail address: " + mailAddress);
+	private Object getPersonAttributesByMail(String mailAddress) throws TemplateException {
+		Object personAttributes = personAttributeResolverService.getPersonAttributesByMail(mailAddress);
+		if (personAttributes == null) {
+			throw new TemplateException("Entry could not be found with mail address: " + mailAddress);
 		}
-		return benutzer;
+		return personAttributes;
+	}
+
+	private Template getTemplate(String name, String contentType, Locale locale) throws TemplateException {
+		String extension = getExtension(contentType);
+		String fileName = name + "." + extension;
+		try {
+			return templateConfig.getTemplate(fileName, locale);
+		} catch (IOException e) {
+			throw new TemplateException("Can't create template " + fileName, e);
+		}
+	}
+
+	private String processTemplate(Template template, Map<String, Object> root) {
+		if (template == null) {
+			return null;
+		}
+		Writer writer = new StringWriter();
+		try {
+			template.process(root, writer);
+		} catch (Exception e) {
+			LOG.error("Failed to process template " + template.getName(), e);
+		}
+		return writer.toString();
+	}
+
+	private List<Locale> getLocales(MimeMessage message) throws MessagingException {
+		List<Locale> locales = null;
+		if (message.getContentLanguage() != null && message.getContentLanguage().length > 0) {
+			locales = new ArrayList<>();
+			for (String languageTag : message.getContentLanguage()) {
+				locales.add(Locale.forLanguageTag(languageTag));
+			}
+		}
+		return locales;
+	}
+
+	private List<Locale> getLocales(MimeBodyPart part) throws MessagingException {
+		List<Locale> locales = null;
+		if (part.getContentLanguage() != null && part.getContentLanguage().length > 0) {
+			locales = new ArrayList<>();
+			for (String languageTag : part.getContentLanguage()) {
+				locales.add(Locale.forLanguageTag(languageTag));
+			}
+		}
+		return locales;
+	}
+
+
+	private String getBody(String content) {
+		Matcher matcherStart = bodyStartPattern.matcher(content);
+		Matcher matcherEnd = bodyEndPattern.matcher(content);
+		if (matcherStart.find()) {
+			if (matcherEnd.find()) {
+				return content.substring(matcherStart.end(), matcherEnd.start());
+			}
+		}
+		return content;
 	}
 
 }

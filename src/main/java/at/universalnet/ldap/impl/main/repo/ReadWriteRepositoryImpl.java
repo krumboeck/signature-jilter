@@ -1,6 +1,6 @@
-package at.universalnet.ad.impl.main.repo;
+package at.universalnet.ldap.impl.main.repo;
 
-import at.universalnet.ad.api.main.repo.ReadWriteRepository;
+import at.universalnet.ldap.api.main.repo.ReadWriteRepository;
 
 public class ReadWriteRepositoryImpl<E> extends ReadOnlyRepositoryImpl<E> implements ReadWriteRepository<E> {
 

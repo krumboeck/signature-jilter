@@ -1,4 +1,4 @@
-FROM openjdk:17
+FROM openjdk:27-ea-slim-trixie
 
 RUN groupadd -r app && useradd -r -s /bin/false -g app app
 

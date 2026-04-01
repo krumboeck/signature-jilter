@@ -1,4 +1,4 @@
-package at.universalnet.ad.spring.boot.main;
+package at.universalnet.ldap.config;
 
 import org.springframework.ldap.pool2.factory.PoolConfig;
 

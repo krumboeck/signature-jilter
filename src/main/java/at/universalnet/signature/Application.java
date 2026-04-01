@@ -25,7 +25,7 @@ import com.sendmail.jilter.samples.standalone.ServerRunnable;
 @SpringBootApplication
 @ComponentScan({
 	"at.universalnet.signature",
-	"at.universalnet.ad.spring.boot.main"
+	"at.universalnet.ldap.config"
 	})
 public class Application implements CommandLineRunner {
 

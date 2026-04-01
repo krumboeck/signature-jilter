@@ -1,4 +1,4 @@
-package at.universalnet.ad.api.main.entry;
+package at.universalnet.ldap.api.main.entry;
 
 import java.util.List;
 
@@ -11,7 +11,7 @@ import org.springframework.ldap.odm.annotations.Entry;
 import org.springframework.ldap.odm.annotations.Id;
 
 @Entry(objectClasses = { "top", "person", "organizationalPerson", "user" })
-public final class LdapBenutzer {
+public final class ActiveDirectoryUser {
 
 	public static final String ATTR_MAIL = "mail";
 	public static final String ATTR_PROXY_ADDRESSES = "proxyAddresses";
@@ -26,7 +26,7 @@ public final class LdapBenutzer {
 
 	@Attribute(name = "cn")
 	@DnAttribute(value = "cn", index = 1)
-	private String commonName;
+	private String cn;
 
 	@Attribute(name = "codePage")
 	private Integer codePage;
@@ -118,7 +118,7 @@ public final class LdapBenutzer {
 	@Attribute(name = "ipPhone")
 	private String ipPhone;
 
-	public LdapBenutzer() {
+	public ActiveDirectoryUser() {
 		super();
 	}
 
@@ -138,12 +138,12 @@ public final class LdapBenutzer {
 		this.badPwdCount = badPwdCount;
 	}
 
-	public String getCommonName() {
-		return commonName;
+	public String getCn() {
+		return cn;
 	}
 
-	public void setCommonName(String commonName) {
-		this.commonName = commonName;
+	public void setCn(String cn) {
+		this.cn = cn;
 	}
 
 	public Integer getCodePage() {

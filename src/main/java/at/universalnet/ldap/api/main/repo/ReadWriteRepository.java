@@ -1,4 +1,4 @@
-package at.universalnet.ad.api.main.repo;
+package at.universalnet.ldap.api.main.repo;
 
 public interface ReadWriteRepository<E> extends ReadOnlyRepository<E> {
 

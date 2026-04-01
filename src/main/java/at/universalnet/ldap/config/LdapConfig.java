@@ -1,4 +1,7 @@
-package at.universalnet.ad.spring.boot.main;
+package at.universalnet.ldap.config;
+
+import java.util.HashMap;
+import java.util.Map;
 
 import javax.inject.Inject;
 import javax.net.ssl.SSLSocketFactory;
@@ -19,13 +22,14 @@ import org.springframework.ldap.pool2.validation.DirContextValidator;
 
 @Configuration
 @ComponentScan({
-	"at.universalnet.ad.api.main",
-	"at.universalnet.ad.impl.main"
+	"at.universalnet.ldap.api.main",
+	"at.universalnet.ldap.impl.main",
+	"at.universalnet.ldap.service"
 	})
 public class LdapConfig {
 
-	@Value("${ssl.enable:true}")
-	private boolean sslEnabled;
+	@Value("${ldap.starttls:true}")
+	private boolean startTlsEnabled;
 
 	@Inject
 	private SSLSocketFactory sslSocketFactory;
@@ -68,7 +72,13 @@ public class LdapConfig {
 	    contextSource.setBase(prop.getBase());
 	    contextSource.setUserDn(prop.getUserDN());
 	    contextSource.setPassword(prop.getPassword());
-	    if (sslEnabled) {
+
+	    // Binäre Attribute explizit deklarieren
+	    Map<String, Object> env = new HashMap<>();
+	    env.put("java.naming.ldap.attributes.binary", "jpegPhoto photo userCertificate thumbnailPhoto");
+	    contextSource.setBaseEnvironmentProperties(env);
+
+	    if (!prop.getUrl().startsWith("ldaps") && startTlsEnabled) {
 	    	contextSource.setAuthenticationStrategy(ldapAuthTLSStrategy());
 	    }
 	    contextSource.setReferral("follow");

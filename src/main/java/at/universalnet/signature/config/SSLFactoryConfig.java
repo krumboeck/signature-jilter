@@ -11,7 +11,7 @@ import org.springframework.context.annotation.Configuration;
 
 import nl.altindag.ssl.SSLFactory;
 import nl.altindag.ssl.SSLFactory.Builder;
-import nl.altindag.ssl.util.PemUtils;
+import nl.altindag.ssl.pem.util.PemUtils;
 
 @Configuration
 public class SSLFactoryConfig {
